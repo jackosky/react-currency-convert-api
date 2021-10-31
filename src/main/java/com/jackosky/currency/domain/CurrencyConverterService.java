@@ -19,14 +19,28 @@
  */
 package com.jackosky.currency.domain;
 
+import com.jackosky.currency.domain.converter.ExternalExchangeRateWebClient;
 import com.jackosky.currency.dto.ConversionResponse;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
 @Service
-public class CurrencyConverter {
+public class CurrencyConverterService {
 
-  public Mono<ConversionResponse> convert(String from, String to, double amount) {
-    return Mono.fromCallable(() -> new ConversionResponse(from, to, amount, amount * 2));
+  private final ExternalExchangeRateWebClient externalExchangeRateWebClient;
+
+  public CurrencyConverterService(ExternalExchangeRateWebClient externalExchangeRateWebClient) {
+    this.externalExchangeRateWebClient = externalExchangeRateWebClient;
+  }
+
+  public Mono<ConversionResponse> convert(String from, String to, BigDecimal amount) {
+    return externalExchangeRateWebClient.getCurrencyRates()
+        .map(currencyRates -> currencyRates.get(to))
+        .map(rate -> new ConversionResponse(from, to, amount,
+            amount.multiply(rate)
+                .setScale(2, RoundingMode.HALF_DOWN)
+        ));
   }
 }

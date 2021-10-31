@@ -24,7 +24,7 @@ import static org.springframework.web.reactive.function.server.RequestPredicates
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 import static org.springframework.web.reactive.function.server.ServerResponse.ok;
 
-import com.jackosky.currency.domain.CurrencyConverter;
+import com.jackosky.currency.domain.CurrencyConverterService;
 import com.jackosky.currency.dto.ConversionRequest;
 import com.jackosky.currency.dto.ConversionResponse;
 import org.springframework.context.annotation.Bean;
@@ -37,9 +37,9 @@ import reactor.core.publisher.Mono;
 @Configuration
 public class CurrencyConverterFunctionsConfig {
 
-  private final CurrencyConverter currencyConverter;
+  private final CurrencyConverterService currencyConverter;
 
-  public CurrencyConverterFunctionsConfig(CurrencyConverter currencyConverter) {
+  public CurrencyConverterFunctionsConfig(CurrencyConverterService currencyConverter) {
     this.currencyConverter = currencyConverter;
   }
 
