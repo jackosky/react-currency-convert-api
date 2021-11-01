@@ -23,12 +23,14 @@ import static org.springframework.web.reactive.function.BodyExtractors.toMono;
 import static org.springframework.web.reactive.function.server.RequestPredicates.POST;
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 import static org.springframework.web.reactive.function.server.ServerResponse.ok;
+import static org.springframework.web.reactive.function.server.ServerResponse.status;
 
 import com.jackosky.currency.domain.CurrencyConverterService;
 import com.jackosky.currency.dto.ConversionRequest;
 import com.jackosky.currency.dto.ConversionResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerResponse;
@@ -50,8 +52,9 @@ public class CurrencyConverterFunctionsConfig {
             .flatMap(request -> currencyConverter.convert(request.getFrom(), request.getTo(), request.getAmount()))
             .flatMap(response -> ok()
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(Mono.just(response), ConversionResponse.class)
-            ));
+                .body(Mono.just(response), ConversionResponse.class))
+            .onErrorResume(IllegalStateException.class,
+                error -> status(HttpStatus.INTERNAL_SERVER_ERROR).bodyValue(error.getMessage()))
+    );
   }
-
 }

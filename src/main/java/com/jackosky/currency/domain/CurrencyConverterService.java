@@ -19,28 +19,64 @@
  */
 package com.jackosky.currency.domain;
 
+import static java.math.BigDecimal.ONE;
+
+import com.jackosky.currency.domain.converter.CurrencyRates;
 import com.jackosky.currency.domain.converter.ExternalExchangeRateWebClient;
 import com.jackosky.currency.dto.ConversionResponse;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Service
 public class CurrencyConverterService {
 
-  private final ExternalExchangeRateWebClient externalExchangeRateWebClient;
+  private final List<ExternalExchangeRateWebClient> exchangeRateWebClients;
 
-  public CurrencyConverterService(ExternalExchangeRateWebClient externalExchangeRateWebClient) {
-    this.externalExchangeRateWebClient = externalExchangeRateWebClient;
+  public CurrencyConverterService(List<ExternalExchangeRateWebClient> exchangeRateWebClients) {
+    this.exchangeRateWebClients = exchangeRateWebClients;
   }
 
   public Mono<ConversionResponse> convert(String from, String to, BigDecimal amount) {
-    return externalExchangeRateWebClient.getCurrencyRates()
-        .map(currencyRates -> currencyRates.get(to))
+    return getCurrencyRate(new ArrayList<>(this.exchangeRateWebClients),
+        ThreadLocalRandom.current().nextInt(exchangeRateWebClients.size()),
+        from,
+        to)
         .map(rate -> new ConversionResponse(from, to, amount,
-            amount.multiply(rate)
-                .setScale(2, RoundingMode.HALF_DOWN)
+            amount.multiply(rate).setScale(2, RoundingMode.DOWN)
         ));
+  }
+
+  private Mono<BigDecimal> getCurrencyRate(List<ExternalExchangeRateWebClient> exchangeRateWebClients,
+      int selectedProvider, String from, String to) {
+    return Flux.fromIterable(exchangeRateWebClients)
+        .elementAt(selectedProvider)
+        .flatMap(ExternalExchangeRateWebClient::getCurrencyRates)
+        .map(currencyRates -> calculateRating(from, to, currencyRates))
+        .onErrorResume(throwable -> retry(exchangeRateWebClients, selectedProvider, from, to));
+  }
+
+  private BigDecimal calculateRating(String from, String to, CurrencyRates currencyRates) {
+    var fromRate = currencyRates.get(from)
+        .orElseThrow(() -> new IllegalArgumentException("Unsupported conversion"));
+    var toRate = currencyRates.get(to)
+        .orElseThrow(() -> new IllegalArgumentException("Unsupported conversion"));
+    return ONE.setScale(4, RoundingMode.DOWN)
+        .divide(fromRate, RoundingMode.DOWN).multiply(toRate);
+  }
+
+  private Mono<BigDecimal> retry(List<ExternalExchangeRateWebClient> exchangeRateWebClients,
+      int selectedProvider, String from, String to) {
+    exchangeRateWebClients.remove(selectedProvider);
+    if (exchangeRateWebClients.isEmpty()) {
+      return Mono.error(new IllegalStateException("No providers available"));
+    }
+    return getCurrencyRate(exchangeRateWebClients,
+        ThreadLocalRandom.current().nextInt(exchangeRateWebClients.size()), from, to);
   }
 }
